@@ -1,29 +1,29 @@
 /**
  * lib/calculos-clt.ts
  * Lógica de cálculos trabalhistas conforme CLT.
- * Tabelas INSS e IRRF: vigência 2024.
+ * Tabelas INSS e IRRF: vigência 2025.
  * ⚠️ Atualizar tabelas a cada janeiro.
  */
 
 // ─────────────────────────────────────────────
-// TABELAS 2024
+// TABELAS 2025
 // ─────────────────────────────────────────────
 
-/** Tabela INSS 2024 — alíquotas progressivas (art. 198 CTB) */
-export const TABELA_INSS_2024 = [
-  { ate: 1412.00,   aliquota: 0.075 },
-  { ate: 2666.68,   aliquota: 0.09  },
-  { ate: 4000.03,   aliquota: 0.12  },
-  { ate: 7786.02,   aliquota: 0.14  },
+/** Tabela INSS 2025 — alíquotas progressivas (Portaria MPS nº 1.716/2024) */
+export const TABELA_INSS_2025 = [
+  { ate: 1518.00,  aliquota: 0.075 },
+  { ate: 2793.88,  aliquota: 0.09  },
+  { ate: 4190.83,  aliquota: 0.12  },
+  { ate: 8157.41,  aliquota: 0.14  },
 ];
 
-/** Tabela IRRF 2024 — bases + deduções fixas */
-export const TABELA_IRRF_2024 = [
-  { ate: 2259.20,   aliquota: 0,     deducao: 0       },
-  { ate: 2826.65,   aliquota: 0.075, deducao: 169.44  },
-  { ate: 3751.05,   aliquota: 0.15,  deducao: 381.44  },
-  { ate: 4664.68,   aliquota: 0.225, deducao: 662.77  },
-  { ate: Infinity,  aliquota: 0.275, deducao: 896.00  },
+/** Tabela IRRF 2025 — bases + deduções fixas (MP 1.294/2025 — vigência março/2025) */
+export const TABELA_IRRF_2025 = [
+  { ate: 2824.00,   aliquota: 0,     deducao: 0       },
+  { ate: 3751.05,   aliquota: 0.075, deducao: 211.80  },
+  { ate: 4664.68,   aliquota: 0.15,  deducao: 492.80  },
+  { ate: 4664.68,   aliquota: 0.225, deducao: 692.78  },
+  { ate: Infinity,  aliquota: 0.275, deducao: 926.00  },
 ];
 
 export const DEDUCAO_DEPENDENTE_IRRF = 189.59;
@@ -33,13 +33,13 @@ export const DEDUCAO_DEPENDENTE_IRRF = 189.59;
 // ─────────────────────────────────────────────
 
 export function calcularINSS(salarioBruto: number): number {
-  const teto = 7786.02;
+  const teto = 8157.41;
   const base = Math.min(salarioBruto, teto);
 
   let inss = 0;
   let faixaAnterior = 0;
 
-  for (const faixa of TABELA_INSS_2024) {
+  for (const faixa of TABELA_INSS_2025) {
     if (base <= faixaAnterior) break;
     const parcela = Math.min(base, faixa.ate) - faixaAnterior;
     inss += parcela * faixa.aliquota;
@@ -63,7 +63,7 @@ export function calcularIRRF(
 
   if (baseCalculo <= 0) return 0;
 
-  for (const faixa of TABELA_IRRF_2024) {
+  for (const faixa of TABELA_IRRF_2025) {
     if (baseCalculo <= faixa.ate) {
       const irrf = baseCalculo * faixa.aliquota - faixa.deducao;
       return round2(Math.max(0, irrf));
@@ -109,6 +109,18 @@ export interface ResultadoRescisao {
   diasTrabalhados: number;
 }
 
+/** Função auxiliar para contagem calendária real de meses */
+function mesesEntreAniversarios(inicio: Date, fim: Date): number {
+  let meses = 0;
+  const cursor = new Date(inicio);
+  while (true) {
+    cursor.setMonth(cursor.getMonth() + 1);
+    if (cursor > fim) break;
+    meses++;
+  }
+  return meses;
+}
+
 export function calcularRescisao(params: {
   salario: number;
   dataAdmissao: Date;
@@ -134,20 +146,27 @@ export function calcularRescisao(params: {
   // Meses avulsas (dentro do ano corrente de trabalho)
   const ultimoAniversario = new Date(dataAdmissao);
   ultimoAniversario.setFullYear(ultimoAniversario.getFullYear() + anosCompletos);
-  const diffMsMeses = dataDemissao.getTime() - ultimoAniversario.getTime();
-  const mesesProporcional = Math.floor(diffMsMeses / (1000 * 60 * 60 * 24 * 30));
-  const diasRestantes = dataDemissao.getDate();
+  
+  // Bug 2: Contagem de meses proporcionais usando calendário real
+  const mesesProporcional = mesesEntreAniversarios(ultimoAniversario, dataDemissao);
 
-  // Dias trabalhados no mês da demissão
-  const diasTrabalhados = diasRestantes;
+  // Bug 3: Dias trabalhados entre o último aniversário e a demissão
+  let diasTrabalhados = Math.floor(
+    (dataDemissao.getTime() - ultimoAniversario.getTime()) /
+    (1000 * 60 * 60 * 24)
+  ) - mesesProporcional * 30 + 1; // +1 para incluir o dia da demissão
+  diasTrabalhados = Math.max(0, Math.min(30, diasTrabalhados));
+
   const saldoSalario = round2((salario / 30) * diasTrabalhados);
 
   // 13º proporcional (meses + dias)
-  const mesesDecimo = mesesProporcional + (diasRestantes >= 15 ? 1 : 0);
+  // Para o 13º, considera-se o mês se trabalhou 15 dias ou mais no mês civil
+  const diasNoMesDemissao = dataDemissao.getDate();
+  const mesesDecimo = mesesProporcional + (diasNoMesDemissao >= 15 ? 1 : 0);
   const decimoTerceiroProporcional = round2((salario / 12) * mesesDecimo);
 
   // Férias proporcionais
-  const mesesFerias = mesesProporcional + (diasRestantes >= 15 ? 1 : 0);
+  const mesesFerias = mesesProporcional + (diasNoMesDemissao >= 15 ? 1 : 0);
   const feriasProporcional = round2((salario / 12) * mesesFerias);
   const tercoFerias = round2(feriasProporcional / 3);
 
@@ -163,8 +182,8 @@ export function calcularRescisao(params: {
   const mesesAviso = Math.ceil(diasAviso / 30);
   const decimoTerceiroAviso = round2((salario / 12) * mesesAviso);
 
-  // FGTS do mês
-  const fgtsMes = round2(salario * 0.08);
+  // Bug 1: FGTS do mês sobre saldo de salário
+  const fgtsMes = round2(saldoSalario * 0.08);
 
   // Multa FGTS 40% sobre saldo acumulado
   const fgtsDeposito = fgtsAcumulado;
@@ -183,8 +202,15 @@ export function calcularRescisao(params: {
     fgtsMes +
     multaFGTS;
 
-  // Descontos incidem sobre: saldo salário + 13º proporcional + aviso
-  const baseDesconto = saldoSalario + decimoTerceiroProporcional + avisoPrevioIndenizado;
+  // Bug 4: Base de INSS/IRRF completa na rescisão
+  const baseDesconto =
+    saldoSalario +
+    decimoTerceiroProporcional +
+    feriasProporcional +
+    feriasVencidas +
+    avisoPrevioIndenizado +
+    decimoTerceiroAviso;
+
   const descontoINSS = calcularINSS(baseDesconto);
   const descontoIRRF = calcularIRRF(baseDesconto, descontoINSS, dependentes);
 

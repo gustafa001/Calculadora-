@@ -131,9 +131,15 @@ export default function RescisaoPage() {
             <div className="result-line"><span>Aviso Prévio Indenizado ({resultado.diasAvisoPrevio} dias)</span><span className="result-value">{formatBRL(resultado.avisoPrevioIndenizado)}</span></div>
             <div className="result-line"><span>13º sobre Aviso Prévio</span><span className="result-value">{formatBRL(resultado.decimoTerceiroAviso)}</span></div>
             <div className="result-line"><span>FGTS do Mês (8%)</span><span className="result-value">{formatBRL(resultado.fgtsMes)}</span></div>
-            {resultado.fgtsDeposito > 0 && (
-              <div className="result-line"><span>Multa FGTS (40% de {formatBRL(resultado.fgtsDeposito)})</span><span className="result-value">{formatBRL(resultado.multaFGTS)}</span></div>
-            )}
+            <div className="result-line">
+              <span>Multa FGTS (40%{resultado.fgtsDeposito > 0 ? ` de ${formatBRL(resultado.fgtsDeposito)}` : ""})</span>
+              <span className="result-value">
+                {resultado.fgtsDeposito > 0
+                  ? formatBRL(resultado.multaFGTS)
+                  : <span className="text-yellow-400 text-xs">Informe o saldo FGTS acumulado</span>
+                }
+              </span>
+            </div>
             <div className="result-line text-red-300"><span>(-) Desconto INSS</span><span className="font-mono">- {formatBRL(resultado.descontoINSS)}</span></div>
             <div className="result-line text-red-300"><span>(-) Desconto IRRF</span><span className="font-mono">- {formatBRL(resultado.descontoIRRF)}</span></div>
           </div>
